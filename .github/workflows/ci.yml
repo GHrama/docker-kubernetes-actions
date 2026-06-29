@@ -1,0 +1,49 @@
+# The name of this pipeline, shows up in GitHub's "Actions" tab.
+name: ci
+
+# WHEN should this run? This is the trigger.
+on:
+  push:                  # run it every time code is pushed...
+    branches: [main]     # ...but only to the 'main' branch
+  pull_request:          # also run it when someone opens a pull request
+
+# A workflow is made of one or more JOBS. Each job runs on its own fresh machine.
+jobs:
+
+  # ---------- JOB 1: run the tests ----------
+  test:                          # "test" is just a name we chose for this job
+    runs-on: ubuntu-latest       # rent a fresh Linux machine to run on
+    steps:                       # the ordered list of things to do
+
+      # Step 1: copy our repo's code onto the rented machine.
+      # Without this, the machine is empty and has none of our files.
+      - uses: actions/checkout@v6
+
+      # Step 2: install Python on the machine.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Step 3: install our project's dependencies (from requirements.txt).
+      - run: pip install -r requirements.txt
+
+      # Step 4: actually run the tests.
+      # We set DATABASE_URL here because main.py reads it on import,
+      # otherwise the import crashes before any test runs.
+      - run: pytest -q
+        env:
+          DATABASE_URL: postgres://fake:fake@localhost:5432/trips
+
+  # ---------- JOB 2: build the Docker image ----------
+  build:
+    needs: test                            # only run if the 'test' job passed
+    if: github.ref == 'refs/heads/main'    # only build on main, not on PRs
+    runs-on: ubuntu-latest
+    steps:
+
+      # Get our code onto this fresh machine too (each job starts clean).
+      - uses: actions/checkout@v6
+
+      # Build the Docker image, exactly like 'docker build' on your Mac.
+      # The '.' means "use the Dockerfile in the current folder".
+      - run: docker build -t tripstats:${{ github.sha }} .
