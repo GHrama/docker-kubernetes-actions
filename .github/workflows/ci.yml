@@ -34,16 +34,30 @@ jobs:
         env:
           DATABASE_URL: postgres://fake:fake@localhost:5432/trips
 
-  # ---------- JOB 2: build the Docker image ----------
-  build:
-    needs: test                            # only run if the 'test' job passed
-    if: github.ref == 'refs/heads/main'    # only build on main, not on PRs
+build:
+    needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    steps:
 
-      # Get our code onto this fresh machine too (each job starts clean).
+    # Permission for this job to upload images to GitHub's registry.
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
       - uses: actions/checkout@v6
 
-      # Build the Docker image, exactly like 'docker build' on your Mac.
-      # The '.' means "use the Dockerfile in the current folder".
-      - run: docker build -t tripstats:${{ github.sha }} .
+      # Log in to GitHub's Container Registry (ghcr.io).
+      # GITHUB_TOKEN is provided automatically by GitHub, no setup needed.
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build AND push in one step (docker/build-push-action does both).
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
